@@ -24,7 +24,7 @@ if 'NO_LOCAL_GGUF' not in os.environ:
 import gguf
 
 # reuse model definitions from convert_hf_to_gguf.py
-from convert_hf_to_gguf import LazyTorchTensor, Model
+from convert_hf_to_gguf import LazyTorchTensor, ModelBase
 
 logger = logging.getLogger("lora-to-gguf")
 
@@ -340,11 +340,11 @@ if __name__ == '__main__':
             sys.exit(1)
     else:
         logger.info(f"Loading base model: {dir_base_model.name}")
-        hparams = Model.load_hparams(dir_base_model)
+        hparams = ModelBase.load_hparams(dir_base_model)
 
     with torch.inference_mode():
         try:
-            model_class = Model.from_model_architecture(hparams["architectures"][0])
+            model_class = ModelBase.from_model_architecture(hparams["architectures"][0])
         except NotImplementedError:
             logger.error(f"Model {hparams['architectures'][0]} is not supported")
             sys.exit(1)
@@ -395,7 +395,7 @@ if __name__ == '__main__':
                         logger.error(f"Unexpected name '{name}': Not a lora_A or lora_B tensor")
                         if ".embed_tokens.weight" in name or ".lm_head.weight" in name:
                             logger.error("Embeddings is present in the adapter. This can be due to new tokens added during fine tuning")
-                            logger.error("Please refer to https://github.com/ggerganov/llama.cpp/pull/9948")
+                            logger.error("Please refer to https://github.com/ggml-org/llama.cpp/pull/9948")
                         sys.exit(1)
 
                     if base_name in tensor_map:
@@ -419,7 +419,7 @@ if __name__ == '__main__':
                 # some archs may have the same tensor for lm_head and output (tie word embeddings)
                 # in this case, adapters targeting lm_head will fail when using llama-export-lora
                 # therefore, we ignore them for now
-                # see: https://github.com/ggerganov/llama.cpp/issues/9065
+                # see: https://github.com/ggml-org/llama.cpp/issues/9065
                 if name == "lm_head.weight" and len(dest) == 0:
                     raise ValueError("lm_head is present in adapter, but is ignored in base model")
                 for dest_name, dest_data in dest:
