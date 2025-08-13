@@ -87,6 +87,10 @@
 #define GGML_CUDA_CC_IS_QY2(cc)      (cc >= GGML_CUDA_CC_QY2 && cc < GGML_CUDA_CC_NG)
 #define GGML_CUDA_CC_IS_NG(cc)       (cc >= GGML_CUDA_CC_NG)
 
+#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA) && CUDART_VERSION >= 11070
+#    define GGML_CUDA_USE_CUB
+#endif  // !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA) && CUDART_VERSION >= 11070
+
 #ifdef __CUDA_ARCH_LIST__
 constexpr bool ggml_cuda_has_arch_impl(int) {
     return false;
@@ -233,8 +237,12 @@ typedef float2 dfloat2;
 #endif // defined(GGML_USE_HIP) && defined(CDNA) && !defined(GGML_HIP_NO_MMQ_MFMA)
 
 #if !defined(GGML_USE_HIP) && __CUDA_ARCH__ >= GGML_CUDA_CC_TURING
-#define NEW_MMA_AVAILABLE
+#define TURING_MMA_AVAILABLE
 #endif // !defined(GGML_USE_HIP) && __CUDA_ARCH__ >= GGML_CUDA_CC_TURING
+
+#if !defined(GGML_USE_HIP) && __CUDA_ARCH__ >= GGML_CUDA_CC_AMPERE
+#define AMPERE_MMA_AVAILABLE
+#endif // !defined(GGML_USE_HIP) && __CUDA_ARCH__ >= GGML_CUDA_CC_AMPERE
 
 #if !defined(GGML_USE_HIP) && __CUDA_ARCH__ >= GGML_CUDA_CC_AMPERE
 #define CP_ASYNC_AVAILABLE
@@ -303,12 +311,16 @@ static bool amd_mfma_available(const int cc) {
 }
 
 // Volta technically had FP16 tensor cores but they work very differently compared to Turing and later.
-static bool new_mma_available(const int cc) {
+static bool turing_mma_available(const int cc) {
     return GGML_CUDA_CC_IS_NVIDIA(cc) && ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_TURING;
 }
 
+static bool ampere_mma_available(const int cc) {
+    return GGML_CUDA_CC_IS_NVIDIA(cc) && ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_AMPERE;
+}
+
 static bool cp_async_available(const int cc) {
-    return cc < GGML_CUDA_CC_OFFSET_AMD && ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_AMPERE;
+    return GGML_CUDA_CC_IS_NVIDIA(cc) && ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_AMPERE;
 }
 
 static constexpr __device__ int ggml_cuda_get_physical_warp_size() {
@@ -410,26 +422,6 @@ static __device__ __forceinline__ half2 warp_reduce_sum(half2 a) {
     NO_DEVICE_CODE;
     return a;
 #endif // FP16_AVAILABLE
-}
-
-// Row reduction kernel template - compute sum (norm=false) or mean (norm=true)
-template<bool norm>
-static __global__ void reduce_rows_f32(const float * x, float * dst, const int ncols) {
-    const int row = blockIdx.x;
-    const int col = threadIdx.x;
-
-    float sum = 0.0f;
-    for (int i = col; i < ncols; i += blockDim.x) {
-        sum += x[row * ncols + i];
-    }
-
-    sum = warp_reduce_sum(sum);
-
-    if (col != 0) {
-        return;
-    }
-
-    dst[row] = norm ? sum / ncols : sum;
 }
 
 template<int width = WARP_SIZE>
