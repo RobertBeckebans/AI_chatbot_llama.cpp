@@ -128,6 +128,12 @@ class LoraTorchTensor:
         assert dim is None
         return self.shape
 
+    def contiguous(self) -> LoraTorchTensor:
+        return LoraTorchTensor(
+            self._lora_A.contiguous(),
+            self._lora_B.contiguous(),
+        )
+
     def reshape(self, *shape: int | tuple[int, ...]) -> LoraTorchTensor:
         if isinstance(shape[0], tuple):
             new_shape: tuple[int, ...] = shape[0]
@@ -193,10 +199,13 @@ class LoraTorchTensor:
             kwargs = {}
 
         if func is torch.permute:
+            assert len(args)
             return type(args[0]).permute(*args, **kwargs)
         elif func is torch.reshape:
+            assert len(args)
             return type(args[0]).reshape(*args, **kwargs)
         elif func is torch.stack:
+            assert len(args)
             assert isinstance(args[0], Sequence)
             dim = kwargs.get("dim", 0)
             assert dim == 0
@@ -205,6 +214,7 @@ class LoraTorchTensor:
                 torch.stack([b._lora_B for b in args[0]], dim),
             )
         elif func is torch.cat:
+            assert len(args)
             assert isinstance(args[0], Sequence)
             dim = kwargs.get("dim", 0)
             assert dim == 0
@@ -242,7 +252,7 @@ def parse_args() -> argparse.Namespace:
         help="path to write to; default: based on input. {ftype} will be replaced by the outtype.",
     )
     parser.add_argument(
-        "--outtype", type=str, choices=["f32", "f16", "bf16", "q8_0", "auto"], default="f16",
+        "--outtype", type=str, choices=["f32", "f16", "bf16", "q8_0", "auto"], default="f32",
         help="output format - use f32 for float32, f16 for float16, bf16 for bfloat16, q8_0 for Q8_0, auto for the highest-fidelity 16-bit float type depending on the first loaded tensor type",
     )
     parser.add_argument(
@@ -356,7 +366,7 @@ if __name__ == '__main__':
             logger.error(f"Model {hparams['architectures'][0]} is not supported")
             sys.exit(1)
 
-        class LoraModel(model_class):
+        class LoraModel(model_class):  # ty: ignore[unsupported-base]
             model_arch = model_class.model_arch
 
             lora_alpha: float
