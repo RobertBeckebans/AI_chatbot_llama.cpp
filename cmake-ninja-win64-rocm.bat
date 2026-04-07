@@ -17,12 +17,13 @@ cmake -B build ^
   -DCMAKE_C_COMPILER="%ROCM_BIN%\clang.exe" ^
   -DCMAKE_CXX_COMPILER="%ROCM_BIN%\clang++.exe" ^
   -DLLAMA_BUILD_TESTS=OFF ^
-  -DGGML_VULKAN=ON ^
   -DLLAMA_CURL=OFF ^
+  -DGGML_VULKAN=OFF ^
   -DGGML_HIP=ON ^
   -DGGML_CUDA=OFF ^
   -DAMDGPU_TARGETS=gfx1201 ^
   -Dhipblas_DIR="%ROCM_ROOT%\lib\cmake\hipblas" ^
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
   .
 
 if errorlevel 1 (
